@@ -86,69 +86,7 @@ Customer ──(M:N via PolicyHolder)── Policy ──(N:1)── PolicyType
 
 ---
 
-## Project Structure
 
-```
-insurance-system/
-├── sql/
-│   └── schema.sql              # Full DDL + seed data
-│
-├── backend/
-│   ├── main.py                 # FastAPI app entry, CORS, router registration
-│   ├── requirements.txt
-│   ├── .env.example
-│   ├── core/
-│   │   ├── config.py           # Pydantic Settings (env vars)
-│   │   └── security.py         # JWT helpers, password hashing
-│   ├── database/
-│   │   └── db.py               # Engine, SessionLocal, get_db()
-│   ├── models/
-│   │   └── models.py           # SQLAlchemy ORM models
-│   ├── schemas/
-│   │   └── schemas.py          # Pydantic request/response schemas
-│   ├── services/
-│   │   ├── customer_service.py
-│   │   ├── policy_service.py   # Policy purchase (atomic)
-│   │   ├── premium_service.py  # Payment (atomic), auto-generation
-│   │   ├── claim_service.py    # Claim validation + status update
-│   │   ├── transaction_service.py
-│   │   └── admin_service.py    # SQL console with query validation
-│   └── routers/
-│       ├── auth.py
-│       ├── customers.py
-│       ├── policies.py
-│       ├── premiums.py
-│       ├── transactions.py
-│       ├── claims.py
-│       └── admin.py
-│
-└── frontend/
-    ├── index.html
-    ├── vite.config.js
-    ├── tailwind.config.js
-    └── src/
-        ├── main.jsx
-        ├── App.jsx             # Routes + ProtectedLayout
-        ├── api/
-        │   ├── axios.js        # Axios instance + JWT interceptors
-        │   └── services.js     # All API call functions
-        ├── hooks/
-        │   └── useAuth.jsx     # Auth context
-        ├── components/
-        │   ├── UI.jsx          # StatusBadge, Modal, DataTable, StatCard…
-        │   └── Sidebar.jsx
-        └── pages/
-            ├── Login.jsx
-            ├── Dashboard.jsx
-            ├── Customers.jsx
-            ├── Policies.jsx
-            ├── Premiums.jsx
-            ├── Transactions.jsx
-            ├── Claims.jsx
-            └── SQLConsole.jsx
-```
-
----
 
 ## API Endpoints
 
@@ -257,26 +195,10 @@ npm install
 npm run dev
 ```
 
-Frontend will be available at `http://localhost:5173`
+Frontend will be available at `http://localhost:3000`
 
 ---
 
-## Environment Variables
-
-Create `backend/.env` from `.env.example`:
-
-```env
-DATABASE_URL=mysql+pymysql://root:yourpassword@localhost:3306/insurance_db
-SECRET_KEY=your-super-secret-key-minimum-32-characters-long
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin123
-```
-
-> ⚠️ Change `SECRET_KEY` and `ADMIN_PASSWORD` before any deployment.
-
----
 
 ## Transaction Management
 
@@ -328,68 +250,7 @@ ROLLBACK ← on DB error
 
 ---
 
-## Security Features
 
-| Feature | Implementation |
-|---|---|
-| JWT Authentication | All routes protected via `Depends(get_current_user)` |
-| Password Hashing | bcrypt via passlib |
-| SQL Injection Prevention | SQLAlchemy ORM parameterized queries throughout |
-| SQL Console Protection | Keyword blocklist, SELECT-only enforcement, comment blocking, multi-statement rejection |
-| Input Validation | Pydantic v2 schemas on all request bodies |
-| Error Sanitization | DB error messages stripped before returning to client |
-| CORS | Restricted to localhost:5173 and localhost:3000 |
-| Token Expiry | Configurable via `ACCESS_TOKEN_EXPIRE_MINUTES` |
-
----
-
-## Edge Cases Handled
-
-| Edge Case | Handling |
-|---|---|
-| Duplicate policy purchase | `HTTP 409` — UNIQUE PK `(customer_id, policy_id)` + pre-check |
-| Payment on already-paid premium | `HTTP 400` with clear message |
-| Expired policy claim | `HTTP 400` — date comparison against `start_date`/`end_date` |
-| Claim > coverage amount | `HTTP 422` — explicit check against `PolicyType.coverage_amount` |
-| Non-holder filing a claim | `HTTP 403` — PolicyHolder membership check |
-| Duplicate customer email/phone | `HTTP 409` — DB UNIQUE constraint + IntegrityError catch |
-| Invalid SQL in console | `HTTP 400` — keyword blocklist + SELECT-only rule |
-| Multi-statement SQL | `HTTP 400` — semicolon detection |
-| SQL comments (injection vector) | `HTTP 400` — `--`, `/*`, `#` blocked |
-| Expired/invalid JWT | `HTTP 401` — jose JWTError caught in `get_current_user` |
-
----
-
-## Screenshots
-
-> Add screenshots in the `docs/screenshots/` directory:
-> - `01_login.png` — Login page
-> - `02_dashboard.png` — Dashboard with stats
-> - `03_customers.png` — Customer list + add modal
-> - `04_policies.png` — Policy types and policies
-> - `05_purchase.png` — Policy purchase flow
-> - `06_premiums.png` — Premium list with Pay Now
-> - `07_transactions.png` — Transaction history
-> - `08_claims.png` — Claims with approve/reject
-> - `09_sql_console.png` — SQL console with results
-> - `10_api_docs.png` — FastAPI /docs swagger UI
-
----
-
-## Future Improvements
-
-- **Alembic migrations** for schema versioning instead of `create_all()`
-- **Role-based access**: separate Customer and Admin roles with scoped permissions
-- **Email notifications**: send premium due reminders via SMTP
-- **PDF generation**: policy documents and claim reports
-- **Pagination**: cursor-based pagination for large tables
-- **Audit log**: immutable ledger of all state changes
-- **Scheduled tasks**: Celery beat to mark overdue premiums automatically
-- **Redis caching**: cache policy type lookups and dashboard stats
-- **Docker Compose**: single-command setup for the full stack
-- **Unit tests**: pytest suite for all service functions
-
----
 
 ## Academic Context
 
