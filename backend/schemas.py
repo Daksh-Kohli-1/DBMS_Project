@@ -99,3 +99,10 @@ class QueryResult(BaseModel):
     columns: List[str]
     rows: List[List]
     row_count: int
+
+    
+class PolicyBuyRequest(BaseModel):
+    policy_type_id: int
+ 
+    class Config:
+        from_attributes = True

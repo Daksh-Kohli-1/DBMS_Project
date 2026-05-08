@@ -59,3 +59,9 @@ export const getCustomerTransactions = (id: number) => API.get(`/transactions/cu
 // ── Admin ─────────────────────────────────────────────────
 export const runQuery       = (sql: string) => API.post('/admin/query', { sql })
 export const getSummary     = () => API.get('/admin/reports/summary')
+
+
+// ── Add these two functions to your existing lib/api.ts ──────────────────────
+
+export const buyPolicy = (policy_type_id: number) =>
+  API.post('/policies/buy', { policy_type_id })   // POST /policies/buy
