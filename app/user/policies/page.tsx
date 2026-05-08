@@ -1,9 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/AuthContext'
-import BottomNav from '@/components/BottomNav'
-import PageHeader from '@/components/PageHeader'
-import Spinner from '@/components/Spinner'
+import BottomNav from '@/backend/components/BottomNav'
+import PageHeader from '@/backend/components/PageHeader'
+import Spinner from '@/backend/components/Spinner'
 import { getCustomerPolicies, getPolicyTypes, buyPolicy } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 

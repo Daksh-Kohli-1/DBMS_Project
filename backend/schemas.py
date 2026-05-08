@@ -33,6 +33,7 @@ class PolicyTypeOut(BaseModel):
     policy_type_id: int
     type_name: str
     coverage_amount: Decimal
+    premium_amount: Decimal          # ← NEW: monthly cost shown in Buy modal
     rules: Optional[str]
     time_period: int
     model_config = {"from_attributes": True}
@@ -53,6 +54,10 @@ class PolicyOut(BaseModel):
 
 class PolicyDetail(PolicyOut):
     policy_type: Optional[PolicyTypeOut] = None
+
+class PolicyBuyRequest(BaseModel):
+    policy_type_id: int
+    model_config = {"from_attributes": True}
 
 # ── Premium ──────────────────────────────────────────
 class PremiumOut(BaseModel):
@@ -99,10 +104,3 @@ class QueryResult(BaseModel):
     columns: List[str]
     rows: List[List]
     row_count: int
-
-    
-class PolicyBuyRequest(BaseModel):
-    policy_type_id: int
- 
-    class Config:
-        from_attributes = True

@@ -7,13 +7,13 @@ import models, schemas
 from auth_utils import get_current_user, require_admin
 from datetime import date
 from sqlalchemy import text
-from dateutil.relativedelta import relativedelta   # pip install python-dateutil
+from dateutil.relativedelta import relativedelta
 
 router = APIRouter()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# READ ENDPOINTS  (all authenticated users)
+# READ ENDPOINTS
 # ──────────────────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=List[schemas.PolicyDetail])
@@ -51,15 +51,18 @@ def customer_policies(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# BUY POLICY  (self-service — any authenticated customer)
+# BUY POLICY  (self-service)
 #
-# Isolation level: SERIALIZABLE is set on this session to prevent two
-# concurrent requests from creating duplicate active policies of the same
-# type for the same customer (phantom-read / write-skew protection).
+# Transaction scope (all-or-nothing):
+#   1. Policy row
+#   2. PolicyHolder row
+#   3. N Premium rows  (one per month for the full policy duration)
 #
-# Transaction scope: Policy row + PolicyHolder row are written atomically.
-# If either insert fails (e.g. FK violation, IntegrityError) the whole unit
-# rolls back so we never get a dangling Policy without a holder.
+# If any insert fails every row is rolled back — no dangling Policy without
+# premiums, no premiums without a Policy.
+#
+# Isolation: SET SESSION SERIALIZABLE so the duplicate-active check and the
+# subsequent inserts are one atomic unit under MySQL (avoids error 1568).
 # ──────────────────────────────────────────────────────────────────────────────
 
 @router.post("/buy", response_model=schemas.PolicyOut)
@@ -68,31 +71,10 @@ def buy_policy(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Lets a logged-in customer purchase a policy for themselves.
-
-    Steps
-    -----
-    1. Raise isolation level to SERIALIZABLE for this connection so that
-       the duplicate-check + insert is protected against concurrent requests.
-    2. Verify the PolicyType exists.
-    3. Guard: reject if the customer already owns an *active* policy of the
-       same type (business rule — one active policy per type per customer).
-    4. Compute start_date = today, end_date = today + time_period months.
-    5. Insert Policy + PolicyHolder inside a single transaction.
-    6. On IntegrityError roll back and return 409.
-    """
-
-    # ── 1. Raise isolation level for this connection ──────────────────────────
-    #
-    # MySQL error 1568: SET TRANSACTION must come BEFORE any transaction starts,
-    # but SQLAlchemy auto-begins a transaction on session creation.
-    # SET SESSION changes the isolation level for this whole connection and
-    # works even inside an already-open transaction — no 1568 error.
-    #
+    # ── 1. Serializable isolation (MySQL-safe) ────────────────────────────────
     db.execute(text("SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
 
-    # ── 2. Look up the requested policy type ─────────────────────────────────
+    # ── 2. Verify policy type exists ──────────────────────────────────────────
     policy_type = (
         db.query(models.PolicyType)
         .filter(models.PolicyType.policy_type_id == body.policy_type_id)
@@ -101,24 +83,15 @@ def buy_policy(
     if not policy_type:
         raise HTTPException(status_code=404, detail="Policy type not found")
 
-    # ── 3. Duplicate-active check ─────────────────────────────────────────────
-    #
-    # We read existing holders and join to Policy to check end_date.
-    # Under SERIALIZABLE, Postgres places a predicate lock on the rows
-    # returned by this query, so a concurrent transaction trying to insert
-    # the same pair will either wait or abort.
-    #
+    # ── 3. Reject if customer already has an active policy of this type ───────
     today = date.today()
     existing_active = (
         db.query(models.Policy)
-        .join(
-            models.PolicyHolder,
-            models.Policy.policy_id == models.PolicyHolder.policy_id,
-        )
+        .join(models.PolicyHolder, models.Policy.policy_id == models.PolicyHolder.policy_id)
         .filter(
             models.PolicyHolder.customer_id == current_user.customer_id,
-            models.Policy.policy_type_id == body.policy_type_id,
-            models.Policy.end_date >= today,   # still active
+            models.Policy.policy_type_id    == body.policy_type_id,
+            models.Policy.end_date          >= today,
         )
         .first()
     )
@@ -128,40 +101,55 @@ def buy_policy(
             detail="You already have an active policy of this type.",
         )
 
-    # ── 4. Compute dates ──────────────────────────────────────────────────────
+    # ── 4. Compute policy dates ───────────────────────────────────────────────
     start_date = today
     end_date   = today + relativedelta(months=int(policy_type.time_period))
 
-    # ── 5. Atomic insert (Policy + PolicyHolder) ──────────────────────────────
+    # ── 5. Atomic insert: Policy + PolicyHolder + Premium schedule ────────────
     #
-    # db.flush() writes the Policy to the DB inside the open transaction
-    # (generates policy_id via SERIAL/AUTO_INCREMENT) but does NOT commit.
-    # Both rows land in the DB together on db.commit(), or both disappear
-    # on db.rollback().  This is standard 2PC-safe unit-of-work behaviour.
+    # Premium schedule logic:
+    #   - One Premium row per month for the full time_period.
+    #   - Due date = start_date + N months (month 1 is due one month in).
+    #   - Amount sourced from policy_type.premium_amount (monthly cost).
+    #   - All start as 'pending'; overdue transition happens at query time
+    #     in the premiums router (no background job needed).
     #
     try:
+        # 5a. Policy
         policy = models.Policy(
             policy_type_id=body.policy_type_id,
             start_date=start_date,
             end_date=end_date,
         )
         db.add(policy)
-        db.flush()   # get policy.policy_id without committing
+        db.flush()  # generates policy.policy_id without committing
 
+        # 5b. PolicyHolder
         holder = models.PolicyHolder(
             customer_id=current_user.customer_id,
             policy_id=policy.policy_id,
         )
         db.add(holder)
+
+        # 5c. Premium schedule — one row per month
+        for month in range(1, int(policy_type.time_period) + 1):
+            due_date = start_date + relativedelta(months=month)
+            premium  = models.Premium(
+                policy_id      = policy.policy_id,
+                date           = due_date,
+                premium_amount = policy_type.premium_amount,
+                status         = "pending",
+            )
+            db.add(premium)
+
         db.commit()
         db.refresh(policy)
 
     except IntegrityError:
-        # ── 6. Rollback on any constraint violation ───────────────────────────
         db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="Could not complete purchase — possible duplicate or constraint error.",
+            detail="Could not complete purchase — constraint error.",
         )
 
     return policy
@@ -185,7 +173,8 @@ def create_policy(
     db.add(policy)
     db.flush()
     holder = models.PolicyHolder(
-        customer_id=body.customer_id, policy_id=policy.policy_id
+        customer_id=body.customer_id,
+        policy_id=policy.policy_id,
     )
     db.add(holder)
     db.commit()

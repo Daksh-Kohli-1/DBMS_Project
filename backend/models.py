@@ -24,6 +24,11 @@ class PolicyType(Base):
     policy_type_id  = Column(Integer, primary_key=True, autoincrement=True)
     type_name       = Column(String(100), nullable=False)
     coverage_amount = Column(Numeric(12,2), nullable=False)
+    # ── NEW: monthly premium amount ──────────────────────────────────────────
+    # This is how much the customer pays each month for this policy type.
+    # Kept separate from coverage_amount (what the insurer pays on a claim).
+    # Stored here so it's defined once on the type, not per-policy-instance.
+    premium_amount  = Column(Numeric(10,2), nullable=False, server_default="0.00")
     rules           = Column(Text)
     time_period     = Column(Integer, nullable=False)
     policies        = relationship("Policy", back_populates="policy_type")

@@ -1,8 +1,8 @@
 'use client'
 import { useState } from 'react'
-import BottomNav from '@/components/BottomNav'
-import PageHeader from '@/components/PageHeader'
-import Spinner from '@/components/Spinner'
+import BottomNav from '@/backend/components/BottomNav'
+import PageHeader from '@/backend/components/PageHeader'
+import Spinner from '@/backend/components/Spinner'
 import { runQuery } from '@/lib/api'
 import { ADMIN_NAV } from '../page'
 

@@ -1,9 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
-import BottomNav from '@/components/BottomNav'
-import PageHeader from '@/components/PageHeader'
-import StatusBadge from '@/components/StatusBadge'
-import Spinner from '@/components/Spinner'
+import BottomNav from '@/backend/components/BottomNav'
+import PageHeader from '@/backend/components/PageHeader'
+import StatusBadge from '@/backend/components/StatusBadge'
+import Spinner from '@/backend/components/Spinner'
 import { getPolicies, getPolicyTypes, getCustomers, createPolicy, deletePolicy, getAllPremiums } from '@/lib/api'
 import { ADMIN_NAV } from '../page'
 

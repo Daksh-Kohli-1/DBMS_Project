@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/AuthContext'
-import BottomNav from '@/components/BottomNav'
-import PageHeader from '@/components/PageHeader'
-import Spinner from '@/components/Spinner'
+import BottomNav from '@/backend/components/BottomNav'
+import PageHeader from '@/backend/components/PageHeader'
+import Spinner from '@/backend/components/Spinner'
 import { getSummary } from '@/lib/api'
 
 export const ADMIN_NAV = [
